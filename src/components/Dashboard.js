@@ -9,11 +9,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import PayoutTable from './PayoutTable'
+import UserProfile from './UserProfile'
 
 function Dashboard({ user, onLogout }) {
   // ============================================
   // STATI
   // ============================================
+  const [showProfile, setShowProfile] = useState(false) // NUOVO: mostra pagina profilo
   const [profile, setProfile] = useState(null)
   const [employees, setEmployees] = useState([])
   const [gameEdition, setGameEdition] = useState(null)
@@ -414,7 +416,7 @@ function Dashboard({ user, onLogout }) {
       {!participation?.payment_status && gameEdition && (
         <div style={{ backgroundColor: '#ffe6e6', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
           <h3>⚠️ Pagamento richiesto</h3>
-          <p>Per inserire la tua puntata devi prima effettuare il pagamento di € {parseFloat(gameEdition.entry_fee).toFixed(2)}.</p>
+          <p>Per inserire la tua puntata devi prima effettuare il pagamento di €{parseFloat(gameEdition.entry_fee).toFixed(2)}.</p>
           <p style={{ fontSize: '14px', color: '#666' }}>
             Contatta l'amministratore per confermare il pagamento.
           </p>
@@ -429,10 +431,10 @@ function Dashboard({ user, onLogout }) {
         <h3>📜 Regolamento in breve</h3>
         <ul style={{ lineHeight: '1.8' }}>
           <li>Scegli 3 dipendenti che daranno le dimissioni entro il 31/12/2026</li>
-          <li>Puoi attivare il bonus Chiringuito su uno: se indovini e sei l'unico, prendi tutto il montepremi! 🏄🏻</li>
-          <li>Prima dimissione = 70% del payout, seconda = 25%, terza = 5% 📊</li>
-          <li>Più tardi arrivano le dimissioni, minore è la percentuale 🥵</li>
-          <li>Più persone scelgono lo stesso dipendente, minore è il payout 💰</li>
+          <li>Puoi attivare il bonus Chiringuito su uno: se indovini, prendi il 60% del montepremi!</li>
+          <li>Prima dimissione = 70% del payout, seconda = 25%, terza = 5%</li>
+          <li>Più tardi arrivano le dimissioni, minore è la percentuale</li>
+          <li>Più persone scelgono lo stesso dipendente, minore è il payout</li>
         </ul>
       </div>
     </div>
