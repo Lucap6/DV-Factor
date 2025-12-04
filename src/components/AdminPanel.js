@@ -405,12 +405,16 @@ function AdminPanel({ user, onLogout }) {
             const totalPaid = editionParticipants
               .filter(p => p.payment_status)
               .reduce((sum, p) => sum + parseFloat(p.payment_amount), 0)
+            
+            // Trova utenti che NON hanno ancora un record in edition_participants
+            const participantUserIds = editionParticipants.map(p => p.user_id)
+            const usersNotParticipating = users.filter(u => !participantUserIds.includes(u.id))
 
             return (
               <div key={edition.id} style={{ marginBottom: '40px' }}>
                 <div style={{ backgroundColor: '#f0f0f0', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
                   <h3>📅 Edizione {edition.year}</h3>
-                  <p><strong>Partecipanti totali:</strong> {editionParticipants.length}</p>
+                  <p><strong>Partecipanti totali:</strong> {editionParticipants.length} / {users.length}</p>
                   <p><strong>Pagamenti confermati:</strong> {paidCount} / {editionParticipants.length}</p>
                   <p><strong>💰 Montepremi:</strong> 
                     <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745', marginLeft: '10px' }}>
@@ -422,10 +426,42 @@ function AdminPanel({ user, onLogout }) {
                   </p>
                   <button 
                     onClick={() => handleRefreshPool(edition.id)}
-                    style={{ padding: '5px 10px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '3px' }}
+                    style={{ padding: '5px 10px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '3px', marginRight: '10px' }}
                   >
                     🔄 Ricalcola montepremi
                   </button>
+                  
+                  {/* NUOVO: Pulsante per aggiungere utenti mancanti */}
+                  {usersNotParticipating.length > 0 && (
+                    <button 
+                      onClick={async () => {
+                        if (!window.confirm(`Vuoi aggiungere tutti gli utenti mancanti (${usersNotParticipating.length}) a questa edizione?`)) return
+                        
+                        try {
+                          const newParticipants = usersNotParticipating.map(user => ({
+                            user_id: user.id,
+                            game_edition_id: edition.id,
+                            payment_amount: edition.entry_fee,
+                            payment_status: false
+                          }))
+                          
+                          const { error } = await supabase
+                            .from('edition_participants')
+                            .insert(newParticipants)
+                          
+                          if (error) throw error
+                          
+                          setMessage(`✅ Aggiunti ${usersNotParticipating.length} utenti all'edizione ${edition.year}!`)
+                          fetchAllData()
+                        } catch (error) {
+                          setMessage('❌ Errore: ' + error.message)
+                        }
+                      }}
+                      style={{ padding: '5px 10px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '3px' }}
+                    >
+                      ➕ Aggiungi {usersNotParticipating.length} utenti mancanti
+                    </button>
+                  )}
                 </div>
 
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
