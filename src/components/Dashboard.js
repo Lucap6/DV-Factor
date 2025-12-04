@@ -1,11 +1,10 @@
 // ============================================
-// DASHBOARD - Pannello utente
+// DASHBOARD - Pannello utente (AGGIORNATO)
 // ============================================
-// Qui l'utente:
-// - Vede il suo profilo
-// - Sceglie i 3 dipendenti
-// - Attiva il bonus Chiringuito
-// - Conferma la giocata (dopo aver pagato €3)
+// Modifiche:
+// - Usa edition_participants invece di payment_status su profiles
+// - Mostra montepremi calcolato dinamicamente
+// - Crea automaticamente la partecipazione all'edizione
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
@@ -13,15 +12,15 @@ import PayoutTable from './PayoutTable'
 
 function Dashboard({ user, onLogout }) {
   // ============================================
-  // STATI - Variabili che salvano i dati
+  // STATI
   // ============================================
   const [profile, setProfile] = useState(null)
   const [employees, setEmployees] = useState([])
   const [gameEdition, setGameEdition] = useState(null)
+  const [participation, setParticipation] = useState(null) // NUOVO: traccia la partecipazione
   const [bet, setBet] = useState(null)
   const [loading, setLoading] = useState(true)
   
-  // Dipendenti selezionati dall'utente
   const [selectedEmployees, setSelectedEmployees] = useState({
     employee1: '',
     employee2: '',
@@ -32,18 +31,18 @@ function Dashboard({ user, onLogout }) {
   const [message, setMessage] = useState('')
 
   // ============================================
-  // CARICAMENTO INIZIALE - Quando si apre la pagina
+  // CARICAMENTO INIZIALE
   // ============================================
   useEffect(() => {
     fetchData()
   }, [user])
 
   // ============================================
-  // FUNZIONE: Carica tutti i dati necessari
+  // FUNZIONE: Carica tutti i dati
   // ============================================
   const fetchData = async () => {
     try {
-      // 1. Carica il profilo dell'utente
+      // 1. Carica il profilo
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -53,7 +52,7 @@ function Dashboard({ user, onLogout }) {
       if (profileError) throw profileError
       setProfile(profileData)
 
-      // 2. Carica l'edizione corrente del gioco (anno 2026)
+      // 2. Carica l'edizione corrente (2026)
       const { data: editionData, error: editionError } = await supabase
         .from('game_editions')
         .select('*')
@@ -62,30 +61,70 @@ function Dashboard({ user, onLogout }) {
         .single()
 
       if (editionError) {
-        console.log('Nessuna edizione attiva trovata')
-      } else {
-        setGameEdition(editionData)
+        console.log('Nessuna edizione attiva')
+        setLoading(false)
+        return
+      }
+      
+      setGameEdition(editionData)
 
-        // 3. Carica la puntata dell'utente (se esiste)
-        const { data: betData, error: betError } = await supabase
-          .from('bets')
-          .select(`
-            *,
-            employee_1:employee_1_id(id, first_name, last_name),
-            employee_2:employee_2_id(id, first_name, last_name),
-            employee_3:employee_3_id(id, first_name, last_name),
-            chiringuito:chiringuito_employee_id(id, first_name, last_name)
-          `)
-          .eq('user_id', user.id)
-          .eq('game_edition_id', editionData.id)
-          .maybeSingle()
+      // 3. NUOVO: Carica o crea la partecipazione
+      let { data: participationData, error: participationError } = await supabase
+        .from('edition_participants')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('game_edition_id', editionData.id)
+        .maybeSingle()
 
-        if (betData) {
-          setBet(betData)
+      // Se non esiste una partecipazione, creala automaticamente
+      if (!participationData) {
+        const { data: newParticipation, error: insertError } = await supabase
+          .from('edition_participants')
+          .insert({
+            user_id: user.id,
+            game_edition_id: editionData.id,
+            payment_amount: editionData.entry_fee,
+            payment_status: false
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Errore nella creazione della partecipazione:', insertError)
+        } else {
+          participationData = newParticipation
         }
       }
 
-      // 4. Carica tutti i dipendenti attivi
+      setParticipation(participationData)
+
+      // 4. Carica la puntata (se esiste)
+      const { data: betData, error: betError } = await supabase
+        .from('bets')
+        .select(`
+          *,
+          employee_1:employee_1_id(id, first_name, last_name),
+          employee_2:employee_2_id(id, first_name, last_name),
+          employee_3:employee_3_id(id, first_name, last_name),
+          chiringuito:chiringuito_employee_id(id, first_name, last_name)
+        `)
+        .eq('user_id', user.id)
+        .eq('game_edition_id', editionData.id)
+        .maybeSingle()
+
+      if (betData) {
+        setBet(betData)
+        
+        // Aggiorna has_bet se necessario
+        if (participationData && !participationData.has_bet) {
+          await supabase
+            .from('edition_participants')
+            .update({ has_bet: true })
+            .eq('id', participationData.id)
+        }
+      }
+
+      // 5. Carica dipendenti
       const { data: employeesData, error: employeesError } = await supabase
         .from('employees')
         .select('*')
@@ -104,32 +143,28 @@ function Dashboard({ user, onLogout }) {
   }
 
   // ============================================
-  // FUNZIONE: Salva la puntata nel database
+  // FUNZIONE: Salva la puntata
   // ============================================
   const handleSubmitBet = async (e) => {
     e.preventDefault()
     setMessage('')
 
-    // CONTROLLI DI VALIDITÀ
-    // Verifica che l'utente abbia pagato
-    if (!profile.payment_status) {
-      setMessage('❌ Devi prima effettuare il pagamento di €3,00 per giocare!')
+    // CONTROLLO: utente ha pagato?
+    if (!participation?.payment_status) {
+      setMessage('❌ Devi prima effettuare il pagamento per giocare!')
       return
     }
 
-    // Verifica che ci sia un'edizione attiva
     if (!gameEdition) {
       setMessage('❌ Nessuna edizione del gioco attiva!')
       return
     }
 
-    // Verifica che l'utente abbia selezionato 3 dipendenti
     if (!selectedEmployees.employee1 || !selectedEmployees.employee2 || !selectedEmployees.employee3) {
       setMessage('❌ Devi selezionare 3 dipendenti!')
       return
     }
 
-    // Verifica che non abbia scelto lo stesso dipendente due volte
     const employees = [selectedEmployees.employee1, selectedEmployees.employee2, selectedEmployees.employee3]
     const uniqueEmployees = new Set(employees)
     if (uniqueEmployees.size !== 3) {
@@ -137,7 +172,6 @@ function Dashboard({ user, onLogout }) {
       return
     }
 
-    // Verifica che il bonus Chiringuito sia su uno dei 3 dipendenti
     if (selectedEmployees.chiringuito && !employees.includes(selectedEmployees.chiringuito)) {
       setMessage('❌ Il bonus Chiringuito deve essere attivato su uno dei 3 dipendenti selezionati!')
       return
@@ -146,7 +180,6 @@ function Dashboard({ user, onLogout }) {
     try {
       setLoading(true)
 
-      // INSERISCI o AGGIORNA la puntata nel database
       const { data, error } = await supabase
         .from('bets')
         .upsert({
@@ -163,8 +196,6 @@ function Dashboard({ user, onLogout }) {
       if (error) throw error
 
       setMessage('✅ Puntata salvata con successo!')
-      
-      // Ricarica i dati per vedere la puntata aggiornata
       await fetchData()
 
     } catch (error) {
@@ -175,9 +206,6 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
-  // ============================================
-  // FUNZIONE: Logout
-  // ============================================
   const handleLogout = async () => {
     await supabase.auth.signOut()
     onLogout()
@@ -187,33 +215,36 @@ function Dashboard({ user, onLogout }) {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '20px auto', padding: '20px' }}>
-      {/* ============================================ */}
-      {/* HEADER - Informazioni utente */}
-      {/* ============================================ */}
+      {/* HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <div>
           <h1>🎮 DV-Factor Dashboard</h1>
           <p>Benvenuto, <strong>{profile?.full_name || user.email}</strong></p>
-          <p style={{ fontSize: '14px', color: profile?.payment_status ? 'green' : 'red' }}>
-            {profile?.payment_status ? '✅ Pagamento effettuato' : '❌ Pagamento NON effettuato'}
-          </p>
+          {participation && (
+            <p style={{ fontSize: '14px', color: participation.payment_status ? 'green' : 'red' }}>
+              {participation.payment_status 
+                ? `✅ Pagamento effettuato (€${parseFloat(participation.payment_amount).toFixed(2)})` 
+                : '❌ Pagamento NON effettuato'}
+            </p>
+          )}
         </div>
         <button onClick={handleLogout} style={{ padding: '10px 20px', cursor: 'pointer' }}>
           Logout
         </button>
       </div>
 
-      {/* ============================================ */}
       {/* INFORMAZIONI EDIZIONE */}
-      {/* ============================================ */}
       {gameEdition ? (
         <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>📅 Edizione {gameEdition.year}</h3>
           <p><strong>Scadenza puntate:</strong> {new Date(gameEdition.betting_deadline).toLocaleDateString('it-IT')}</p>
           <p><strong>Fine gioco:</strong> {new Date(gameEdition.end_date).toLocaleDateString('it-IT')}</p>
           <p><strong>Quota partecipazione:</strong> €{parseFloat(gameEdition.entry_fee).toFixed(2)}</p>
-          <p><strong>Jackpot:</strong> €{parseFloat(gameEdition.jackpot).toFixed(2)}</p>
-          <p><strong>Montepremi totale:</strong> €{parseFloat(gameEdition.total_pool).toFixed(2)}</p>
+          <p><strong>Jackpot iniziale:</strong> €{parseFloat(gameEdition.jackpot).toFixed(2)}</p>
+          <p><strong>💰 Montepremi totale:</strong> <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745' }}>€{parseFloat(gameEdition.total_pool).toFixed(2)}</span></p>
+          <p style={{ fontSize: '12px', color: '#666' }}>
+            (Aggiornato in tempo reale con i pagamenti confermati)
+          </p>
         </div>
       ) : (
         <div style={{ backgroundColor: '#ffe6e6', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
@@ -221,14 +252,11 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* ============================================ */}
-      {/* VISUALIZZA PUNTATA (se già inserita) */}
-      {/* ============================================ */}
+      {/* VISUALIZZA PUNTATA */}
       {bet && (
         <div style={{ backgroundColor: '#e6f7ff', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>📝 La tua puntata</h3>
           {bet.is_revealed ? (
-            // Se il gioco è finito, mostra la puntata
             <div>
               <p><strong>Dipendente 1:</strong> {bet.employee_1?.first_name} {bet.employee_1?.last_name}</p>
               <p><strong>Dipendente 2:</strong> {bet.employee_2?.first_name} {bet.employee_2?.last_name}</p>
@@ -240,7 +268,6 @@ function Dashboard({ user, onLogout }) {
               )}
             </div>
           ) : (
-            // Se il gioco è in corso, nascondi i dettagli
             <p>🔒 Puntata inserita e registrata. I dettagli verranno rivelati a fine gioco.</p>
           )}
           <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
@@ -249,10 +276,8 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* ============================================ */}
       {/* FORM INSERIMENTO PUNTATA */}
-      {/* ============================================ */}
-      {!bet && gameEdition && profile?.payment_status && (
+      {!bet && gameEdition && participation?.payment_status && (
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #ddd' }}>
           <h3>🎯 Inserisci la tua puntata</h3>
           <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
@@ -352,7 +377,6 @@ function Dashboard({ user, onLogout }) {
               </select>
             </div>
 
-            {/* PULSANTE CONFERMA */}
             <button 
               type="submit" 
               disabled={loading}
@@ -387,32 +411,28 @@ function Dashboard({ user, onLogout }) {
       )}
 
       {/* MESSAGGIO SE NON HA PAGATO */}
-      {!profile?.payment_status && (
+      {!participation?.payment_status && gameEdition && (
         <div style={{ backgroundColor: '#ffe6e6', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
           <h3>⚠️ Pagamento richiesto</h3>
-          <p>Per inserire la tua puntata devi prima effettuare il pagamento di €3,00.</p>
+          <p>Per inserire la tua puntata devi prima effettuare il pagamento di € {parseFloat(gameEdition.entry_fee).toFixed(2)}.</p>
           <p style={{ fontSize: '14px', color: '#666' }}>
             Contatta l'amministratore per confermare il pagamento.
           </p>
         </div>
       )}
 
-      {/* ============================================ */}
       {/* TABELLA QUOTAZIONI */}
-      {/* ============================================ */}
       <PayoutTable />
 
-      {/* ============================================ */}
       {/* REGOLAMENTO */}
-      {/* ============================================ */}
       <div style={{ marginTop: '40px', padding: '20px', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
         <h3>📜 Regolamento in breve</h3>
         <ul style={{ lineHeight: '1.8' }}>
           <li>Scegli 3 dipendenti che daranno le dimissioni entro il 31/12/2026</li>
-          <li>Puoi attivare il bonus Chiringuito su uno: se indovini, prendi il 60% del montepremi!</li>
-          <li>Prima dimissione = 70% del payout, seconda = 25%, terza = 5%</li>
-          <li>Più tardi arrivano le dimissioni, minore è la percentuale</li>
-          <li>Più persone scelgono lo stesso dipendente, minore è il payout</li>
+          <li>Puoi attivare il bonus Chiringuito su uno: se indovini e sei l'unico, prendi tutto il montepremi! 🏄🏻</li>
+          <li>Prima dimissione = 70% del payout, seconda = 25%, terza = 5% 📊</li>
+          <li>Più tardi arrivano le dimissioni, minore è la percentuale 🥵</li>
+          <li>Più persone scelgono lo stesso dipendente, minore è il payout 💰</li>
         </ul>
       </div>
     </div>

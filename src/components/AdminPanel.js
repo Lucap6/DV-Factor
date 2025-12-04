@@ -1,31 +1,30 @@
 // ============================================
-// ADMIN PANEL - Pannello amministratore
+// ADMIN PANEL - Pannello amministratore (AGGIORNATO)
 // ============================================
-// L'admin può:
-// - Creare edizioni del gioco
-// - Aggiungere dipendenti
-// - Confermare pagamenti degli utenti
-// - Registrare dimissioni
-// - Calcolare vincite
+// Modifiche:
+// - Gestisce edition_participants per i pagamenti
+// - Mostra montepremi calcolato in tempo reale
+// - Tab dedicata ai partecipanti per edizione
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
 function AdminPanel({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('users') // Tab attiva
+  const [activeTab, setActiveTab] = useState('participants') // Tab attiva
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
   // ============================================
-  // STATI PER I VARI DATI
+  // STATI
   // ============================================
   const [users, setUsers] = useState([])
   const [employees, setEmployees] = useState([])
   const [gameEditions, setGameEditions] = useState([])
   const [bets, setBets] = useState([])
+  const [participants, setParticipants] = useState([]) // NUOVO
 
   // ============================================
-  // FORM PER NUOVO DIPENDENTE
+  // FORM
   // ============================================
   const [newEmployee, setNewEmployee] = useState({
     first_name: '',
@@ -34,14 +33,12 @@ function AdminPanel({ user, onLogout }) {
     hire_date: ''
   })
 
-  // ============================================
-  // FORM PER NUOVA EDIZIONE
-  // ============================================
   const [newEdition, setNewEdition] = useState({
     year: 2026,
     start_date: '',
     end_date: '',
     betting_deadline: '',
+    entry_fee: 3.00,
     jackpot: 0
   })
 
@@ -79,7 +76,18 @@ function AdminPanel({ user, onLogout }) {
         .order('year', { ascending: false })
       setGameEditions(editionsData || [])
 
-      // Carica puntate con tutti i dettagli
+      // NUOVO: Carica partecipanti con dettagli
+      const { data: participantsData } = await supabase
+        .from('edition_participants')
+        .select(`
+          *,
+          user:user_id(email, full_name),
+          edition:game_edition_id(year)
+        `)
+        .order('created_at', { ascending: false })
+      setParticipants(participantsData || [])
+
+      // Carica puntate
       const { data: betsData } = await supabase
         .from('bets')
         .select(`
@@ -135,14 +143,14 @@ function AdminPanel({ user, onLogout }) {
         .from('game_editions')
         .insert([{
           ...newEdition,
-          entry_fee: 3.00,
-          status: 'open'
+          status: 'open',
+          total_pool: parseFloat(newEdition.jackpot) // Inizialmente solo il jackpot
         }])
 
       if (error) throw error
 
       setMessage('✅ Edizione creata con successo!')
-      setNewEdition({ year: 2026, start_date: '', end_date: '', betting_deadline: '', jackpot: 0 })
+      setNewEdition({ year: 2027, start_date: '', end_date: '', betting_deadline: '', entry_fee: 3.00, jackpot: 0 })
       fetchAllData()
     } catch (error) {
       setMessage('❌ Errore: ' + error.message)
@@ -150,22 +158,55 @@ function AdminPanel({ user, onLogout }) {
   }
 
   // ============================================
-  // FUNZIONE: Conferma pagamento utente
+  // FUNZIONE: Conferma pagamento partecipante
   // ============================================
-  const handleConfirmPayment = async (userId) => {
+  const handleConfirmPayment = async (participantId, paymentAmount) => {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('edition_participants')
         .update({ 
           payment_status: true,
           payment_date: new Date().toISOString()
         })
-        .eq('id', userId)
+        .eq('id', participantId)
 
       if (error) throw error
 
-      setMessage('✅ Pagamento confermato!')
-      fetchAllData()
+      setMessage('✅ Pagamento confermato! Il montepremi si aggiornerà automaticamente.')
+      
+      // Aspetta un momento per il trigger
+      setTimeout(() => {
+        fetchAllData()
+      }, 500)
+    } catch (error) {
+      setMessage('❌ Errore: ' + error.message)
+    }
+  }
+
+  // ============================================
+  // FUNZIONE: Annulla pagamento partecipante
+  // ============================================
+  const handleCancelPayment = async (participantId) => {
+    if (!window.confirm('Sei sicuro di voler annullare questo pagamento?')) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('edition_participants')
+        .update({ 
+          payment_status: false,
+          payment_date: null
+        })
+        .eq('id', participantId)
+
+      if (error) throw error
+
+      setMessage('✅ Pagamento annullato! Il montepremi si aggiornerà automaticamente.')
+      
+      setTimeout(() => {
+        fetchAllData()
+      }, 500)
     } catch (error) {
       setMessage('❌ Errore: ' + error.message)
     }
@@ -180,7 +221,7 @@ function AdminPanel({ user, onLogout }) {
 
     try {
       const date = new Date(resignationDate)
-      const month = date.getMonth() + 1 // JavaScript conta i mesi da 0
+      const month = date.getMonth() + 1
 
       const { error } = await supabase
         .from('employees')
@@ -202,7 +243,7 @@ function AdminPanel({ user, onLogout }) {
   }
 
   // ============================================
-  // FUNZIONE: Rivela tutte le puntate (fine gioco)
+  // FUNZIONE: Rivela tutte le puntate
   // ============================================
   const handleRevealBets = async (editionId) => {
     if (!window.confirm('Sei sicuro di voler rivelare tutte le puntate? Questa azione non può essere annullata!')) {
@@ -225,8 +266,30 @@ function AdminPanel({ user, onLogout }) {
   }
 
   // ============================================
-  // FUNZIONE: Logout
+  // FUNZIONE: Aggiorna montepremi manualmente
   // ============================================
+  const handleRefreshPool = async (editionId) => {
+    try {
+      // Chiama la funzione SQL che ricalcola il montepremi
+      const { data, error } = await supabase.rpc('calculate_total_pool', {
+        edition_id: editionId
+      })
+
+      if (error) throw error
+
+      // Aggiorna l'edizione
+      await supabase
+        .from('game_editions')
+        .update({ total_pool: data })
+        .eq('id', editionId)
+
+      setMessage('✅ Montepremi aggiornato!')
+      fetchAllData()
+    } catch (error) {
+      setMessage('❌ Errore: ' + error.message)
+    }
+  }
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     onLogout()
@@ -236,9 +299,7 @@ function AdminPanel({ user, onLogout }) {
 
   return (
     <div style={{ maxWidth: '1400px', margin: '20px auto', padding: '20px' }}>
-      {/* ============================================ */}
       {/* HEADER */}
-      {/* ============================================ */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <h1>👨‍💼 Pannello Amministratore</h1>
         <button onClick={handleLogout} style={{ padding: '10px 20px', cursor: 'pointer' }}>
@@ -259,10 +320,21 @@ function AdminPanel({ user, onLogout }) {
         </div>
       )}
 
-      {/* ============================================ */}
       {/* TABS DI NAVIGAZIONE */}
-      {/* ============================================ */}
       <div style={{ borderBottom: '2px solid #ddd', marginBottom: '20px' }}>
+        <button 
+          onClick={() => setActiveTab('participants')}
+          style={{ 
+            padding: '10px 20px', 
+            marginRight: '5px',
+            backgroundColor: activeTab === 'participants' ? '#007bff' : '#f0f0f0',
+            color: activeTab === 'participants' ? 'white' : 'black',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          Partecipanti ({participants.length})
+        </button>
         <button 
           onClick={() => setActiveTab('users')}
           style={{ 
@@ -317,6 +389,117 @@ function AdminPanel({ user, onLogout }) {
       </div>
 
       {/* ============================================ */}
+      {/* TAB: PARTECIPANTI (NUOVO) */}
+      {/* ============================================ */}
+      {activeTab === 'participants' && (
+        <div>
+          <h2>🎫 Gestione Partecipanti</h2>
+          <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
+            Qui puoi confermare i pagamenti degli utenti per ciascuna edizione. Il montepremi si aggiorna automaticamente.
+          </p>
+
+          {/* Raggruppa per edizione */}
+          {gameEditions.map(edition => {
+            const editionParticipants = participants.filter(p => p.game_edition_id === edition.id)
+            const paidCount = editionParticipants.filter(p => p.payment_status).length
+            const totalPaid = editionParticipants
+              .filter(p => p.payment_status)
+              .reduce((sum, p) => sum + parseFloat(p.payment_amount), 0)
+
+            return (
+              <div key={edition.id} style={{ marginBottom: '40px' }}>
+                <div style={{ backgroundColor: '#f0f0f0', padding: '15px', borderRadius: '8px', marginBottom: '15px' }}>
+                  <h3>📅 Edizione {edition.year}</h3>
+                  <p><strong>Partecipanti totali:</strong> {editionParticipants.length}</p>
+                  <p><strong>Pagamenti confermati:</strong> {paidCount} / {editionParticipants.length}</p>
+                  <p><strong>💰 Montepremi:</strong> 
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745', marginLeft: '10px' }}>
+                      €{parseFloat(edition.total_pool).toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#666', marginLeft: '5px' }}>
+                      (Jackpot: €{parseFloat(edition.jackpot).toFixed(2)} + Pagamenti: €{totalPaid.toFixed(2)})
+                    </span>
+                  </p>
+                  <button 
+                    onClick={() => handleRefreshPool(edition.id)}
+                    style={{ padding: '5px 10px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '3px' }}
+                  >
+                    🔄 Ricalcola montepremi
+                  </button>
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f0f0f0' }}>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Utente</th>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Email</th>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Importo</th>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Pagamento</th>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Data pagamento</th>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Puntata</th>
+                      <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Azioni</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editionParticipants.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" style={{ border: '1px solid #ddd', padding: '20px', textAlign: 'center', color: '#999' }}>
+                          Nessun partecipante per questa edizione
+                        </td>
+                      </tr>
+                    ) : (
+                      editionParticipants.map(participant => (
+                        <tr key={participant.id}>
+                          <td style={{ border: '1px solid #ddd', padding: '10px' }}>
+                            {participant.user?.full_name || '-'}
+                          </td>
+                          <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                            {participant.user?.email}
+                          </td>
+                          <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                            €{parseFloat(participant.payment_amount).toFixed(2)}
+                          </td>
+                          <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                            {participant.payment_status ? '✅ Pagato' : '❌ Non pagato'}
+                          </td>
+                          <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                            {participant.payment_date 
+                              ? new Date(participant.payment_date).toLocaleDateString('it-IT')
+                              : '-'
+                            }
+                          </td>
+                          <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                            {participant.has_bet ? '✅' : '❌'}
+                          </td>
+                          <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                            {!participant.payment_status ? (
+                              <button 
+                                onClick={() => handleConfirmPayment(participant.id, participant.payment_amount)}
+                                style={{ padding: '5px 10px', cursor: 'pointer', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '3px' }}
+                              >
+                                Conferma pagamento
+                              </button>
+                            ) : (
+                              <button 
+                                onClick={() => handleCancelPayment(participant.id)}
+                                style={{ padding: '5px 10px', cursor: 'pointer', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '3px' }}
+                              >
+                                Annulla pagamento
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ============================================ */}
       {/* TAB: UTENTI */}
       {/* ============================================ */}
       {activeTab === 'users' && (
@@ -327,9 +510,8 @@ function AdminPanel({ user, onLogout }) {
               <tr style={{ backgroundColor: '#f0f0f0' }}>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Nome</th>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Email</th>
-                <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Pagamento</th>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Admin</th>
-                <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Azioni</th>
+                <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Data registrazione</th>
               </tr>
             </thead>
             <tbody>
@@ -338,20 +520,10 @@ function AdminPanel({ user, onLogout }) {
                   <td style={{ border: '1px solid #ddd', padding: '10px' }}>{user.full_name || '-'}</td>
                   <td style={{ border: '1px solid #ddd', padding: '10px' }}>{user.email}</td>
                   <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
-                    {user.payment_status ? '✅' : '❌'}
-                  </td>
-                  <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
                     {user.is_admin ? '👑' : '-'}
                   </td>
                   <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
-                    {!user.payment_status && (
-                      <button 
-                        onClick={() => handleConfirmPayment(user.id)}
-                        style={{ padding: '5px 10px', cursor: 'pointer', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '3px' }}
-                      >
-                        Conferma pagamento
-                      </button>
-                    )}
+                    {new Date(user.created_at).toLocaleDateString('it-IT')}
                   </td>
                 </tr>
               ))}
@@ -367,7 +539,6 @@ function AdminPanel({ user, onLogout }) {
         <div>
           <h2>👔 Gestione Dipendenti</h2>
           
-          {/* Form aggiungi dipendente */}
           <div style={{ backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
             <h3>➕ Aggiungi nuovo dipendente</h3>
             <form onSubmit={handleAddEmployee}>
@@ -417,7 +588,6 @@ function AdminPanel({ user, onLogout }) {
             </form>
           </div>
 
-          {/* Tabella dipendenti */}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
@@ -465,7 +635,6 @@ function AdminPanel({ user, onLogout }) {
         <div>
           <h2>📅 Gestione Edizioni</h2>
           
-          {/* Form nuova edizione */}
           <div style={{ backgroundColor: '#f9f9f9', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
             <h3>➕ Crea nuova edizione</h3>
             <form onSubmit={handleCreateEdition}>
@@ -476,6 +645,17 @@ function AdminPanel({ user, onLogout }) {
                     type="number"
                     value={newEdition.year}
                     onChange={(e) => setNewEdition({...newEdition, year: parseInt(e.target.value)})}
+                    required
+                    style={{ width: '100%', padding: '8px' }}
+                  />
+                </div>
+                <div>
+                  <label>Quota partecipazione (€):</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newEdition.entry_fee}
+                    onChange={(e) => setNewEdition({...newEdition, entry_fee: parseFloat(e.target.value)})}
                     required
                     style={{ width: '100%', padding: '8px' }}
                   />
@@ -527,12 +707,12 @@ function AdminPanel({ user, onLogout }) {
             </form>
           </div>
 
-          {/* Tabella edizioni */}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'left' }}>Anno</th>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Stato</th>
+                <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Quota</th>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Scadenza puntate</th>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Fine gioco</th>
                 <th style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>Jackpot</th>
@@ -548,6 +728,9 @@ function AdminPanel({ user, onLogout }) {
                     {edition.status === 'open' ? '🟢 Aperta' : edition.status === 'closed' ? '🔴 Chiusa' : '✅ Finita'}
                   </td>
                   <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                    €{parseFloat(edition.entry_fee).toFixed(2)}
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
                     {new Date(edition.betting_deadline).toLocaleDateString('it-IT')}
                   </td>
                   <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
@@ -556,15 +739,21 @@ function AdminPanel({ user, onLogout }) {
                   <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
                     €{parseFloat(edition.jackpot).toFixed(2)}
                   </td>
-                  <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
+                  <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center', fontWeight: 'bold', color: '#28a745' }}>
                     €{parseFloat(edition.total_pool).toFixed(2)}
                   </td>
                   <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>
                     <button 
                       onClick={() => handleRevealBets(edition.id)}
-                      style={{ padding: '5px 10px', cursor: 'pointer', backgroundColor: '#ffc107', color: 'black', border: 'none', borderRadius: '3px' }}
+                      style={{ padding: '5px 10px', cursor: 'pointer', backgroundColor: '#ffc107', color: 'black', border: 'none', borderRadius: '3px', marginRight: '5px' }}
                     >
                       Rivela puntate
+                    </button>
+                    <button 
+                      onClick={() => handleRefreshPool(edition.id)}
+                      style={{ padding: '5px 10px', cursor: 'pointer', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '3px' }}
+                    >
+                      🔄 Aggiorna pool
                     </button>
                   </td>
                 </tr>
@@ -584,6 +773,7 @@ function AdminPanel({ user, onLogout }) {
             <thead>
               <tr style={{ backgroundColor: '#f0f0f0' }}>
                 <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Utente</th>
+                <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>Edizione</th>
                 <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Dip. 1</th>
                 <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Dip. 2</th>
                 <th style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'left' }}>Dip. 3</th>
@@ -596,6 +786,9 @@ function AdminPanel({ user, onLogout }) {
                 <tr key={bet.id}>
                   <td style={{ border: '1px solid #ddd', padding: '8px' }}>
                     {bet.user?.full_name || bet.user?.email || 'N/A'}
+                  </td>
+                  <td style={{ border: '1px solid #ddd', padding: '8px', textAlign: 'center' }}>
+                    {gameEditions.find(e => e.id === bet.game_edition_id)?.year || '-'}
                   </td>
                   <td style={{ border: '1px solid #ddd', padding: '8px' }}>
                     {bet.employee_1 ? `${bet.employee_1.last_name} ${bet.employee_1.first_name}` : 'N/A'}
