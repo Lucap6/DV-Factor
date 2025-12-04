@@ -82,7 +82,7 @@ function Login({ onLogin }) {
             marginBottom: '10px',
             color: '#007bff'
           }}>
-            🎮 DV-Factor
+            🏄🏻 DV-Factor
           </h1>
           <h2 style={{ 
             fontSize: '24px', 
@@ -320,7 +320,7 @@ function Login({ onLogin }) {
             fontWeight: 'bold',
             textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
           }}>
-            🏖️ Il Fantasy Game che nessuno ha mai osato creare!
+            🏄🏻 Questo è il fantasy-game sulle dimissioni volontarie che nessun HR ha mai osato creare!
           </h2>
           
           <p style={{ 
@@ -329,7 +329,7 @@ function Login({ onLogin }) {
             marginBottom: '30px',
             textShadow: '1px 1px 3px rgba(0,0,0,0.5)'
           }}>
-            Scegli 3 dipendenti che secondo te daranno le dimissioni entro fine 2026. 
+            Scegli 3 dipendenti che secondo te daranno le dimissioni entro fine anno. 
             Attiva il <strong>Bonus "Chiringuito a Fuerteventura"</strong> e vinci il jackpot 
             se indovini chi mollerà tutto per aprire un baretto sulla spiaggia! 🍹
           </p>
@@ -366,12 +366,12 @@ function Login({ onLogin }) {
               </div>
 
               <div>
-                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🏖️</div>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📆</div>
                 <h4 style={{ fontSize: '18px', marginBottom: '8px', color: '#007bff' }}>
-                  Attiva il Bonus
+                  Attenzione
                 </h4>
                 <p style={{ fontSize: '14px', color: '#666' }}>
-                  Punta forte su uno: 60% del montepremi!
+                  Più tempo passa, più si erode il montepremi!
                 </p>
               </div>
 
@@ -381,7 +381,7 @@ function Login({ onLogin }) {
                   Vinci il jackpot
                 </h4>
                 <p style={{ fontSize: '14px', color: '#666' }}>
-                  Prima dimissione = 70% del payout
+                  Prima dimissione = 70% del payout + l'eventuale jackpot
                 </p>
               </div>
             </div>
@@ -425,10 +425,10 @@ function Login({ onLogin }) {
         fontSize: '14px'
       }}>
         <p style={{ margin: 0 }}>
-          🎮 DV-Factor - Il fantasy game sulle dimissioni volontarie
+          🏄🏻 DV-Factor: il fantasy-game sulle dimissioni volontarie che nessun HR ha mai osato creare!
         </p>
         <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>
-          Gioco privato tra amici, a scopo ricreativo • Art. 1933 C.C.
+          Da un'idea malata di @lucap6 • Gioco privato tra amici, a scopo ricreativo • Art. 1933 C.C.
         </p>
       </div>
     </div>
