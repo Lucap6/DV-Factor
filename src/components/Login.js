@@ -1,11 +1,12 @@
 // ============================================
-// LOGIN COMPONENT - Pagina di accesso
+// LOGIN COMPONENT - Pagina di accesso (AGGIORNATO)
 // ============================================
 // Permette agli utenti di registrarsi o fare login
-// Gestisce l'autenticazione tramite Supabase
+// Include link per recupero password
 
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
+import ForgotPassword from './ForgotPassword'
 
 function Login({ onLogin }) {
   // "Stati" per salvare cosa scrive l'utente nei campi
@@ -13,8 +14,16 @@ function Login({ onLogin }) {
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [isSignUp, setIsSignUp] = useState(false) // true = registrazione, false = login
+  const [showForgotPassword, setShowForgotPassword] = useState(false) // NUOVO
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+
+  // ============================================
+  // Se l'utente vuole recuperare la password
+  // ============================================
+  if (showForgotPassword) {
+    return <ForgotPassword onBack={() => setShowForgotPassword(false)} />
+  }
 
   // ============================================
   // FUNZIONE: Gestisce il login o la registrazione
@@ -62,7 +71,7 @@ function Login({ onLogin }) {
 
   return (
     <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h1>🎮 DV-Factor</h1>
+      <h1>🏄🏻 DV-Factor</h1>
       <h2>{isSignUp ? 'Registrazione' : 'Login'}</h2>
 
       <form onSubmit={handleAuth}>
@@ -103,6 +112,26 @@ function Login({ onLogin }) {
             style={{ width: '100%', padding: '8px' }}
           />
         </div>
+
+        {/* NUOVO: Link password dimenticata (solo in login) */}
+        {!isSignUp && (
+          <div style={{ marginBottom: '15px', textAlign: 'right' }}>
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                color: '#007bff', 
+                cursor: 'pointer', 
+                textDecoration: 'underline',
+                fontSize: '14px'
+              }}
+            >
+              Password dimenticata? 😔
+            </button>
+          </div>
+        )}
 
         {/* Pulsante INVIA */}
         <button 

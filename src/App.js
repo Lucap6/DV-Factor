@@ -1,36 +1,52 @@
 // ============================================
-// APP.JS - File principale dell'applicazione
+// APP.JS - File principale (AGGIORNATO)
 // ============================================
-// Questo file:
-// - Gestisce l'autenticazione (chi è loggato)
-// - Decide quale componente mostrare (Login, Dashboard, AdminPanel)
-// - Mantiene lo stato dell'utente
+// Gestisce autenticazione e routing
+// Include gestione reset password
 
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
 import AdminPanel from './components/AdminPanel'
+import ResetPassword from './components/ResetPassword'
 import './App.css'
 
 function App() {
-  // ============================================
-  // STATI - Variabili globali dell'app
-  // ============================================
-  const [user, setUser] = useState(null) // Utente loggato (null = nessuno)
-  const [profile, setProfile] = useState(null) // Profilo dell'utente dal database
-  const [loading, setLoading] = useState(true) // Stiamo caricando?
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [isResettingPassword, setIsResettingPassword] = useState(false) // NUOVO
 
   // ============================================
-  // CARICAMENTO INIZIALE - Controlla se c'è un utente loggato
+  // CARICAMENTO INIZIALE
   // ============================================
   useEffect(() => {
-    // Controlla se c'è già una sessione attiva
+    // Controlla se siamo nella pagina di reset password
+    const params = new URLSearchParams(window.location.search)
+    const isReset = window.location.pathname === '/reset-password' || params.get('type') === 'recovery'
+    
+    if (isReset) {
+      setIsResettingPassword(true)
+      setLoading(false)
+      return
+    }
+
+    // Altrimenti procedi con il controllo sessione normale
     checkSession()
 
-    // Ascolta i cambiamenti di autenticazione (login/logout)
+    // Listener per cambiamenti di autenticazione
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth event:', event)
+        
+        // Se l'evento è PASSWORD_RECOVERY, mostra la pagina di reset
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsResettingPassword(true)
+          setLoading(false)
+          return
+        }
+
         if (session?.user) {
           setUser(session.user)
           await fetchProfile(session.user.id)
@@ -42,14 +58,13 @@ function App() {
       }
     )
 
-    // Pulizia quando il componente viene distrutto
     return () => {
       authListener.subscription.unsubscribe()
     }
   }, [])
 
   // ============================================
-  // FUNZIONE: Controlla se c'è una sessione attiva
+  // FUNZIONE: Controlla sessione
   // ============================================
   const checkSession = async () => {
     try {
@@ -67,7 +82,7 @@ function App() {
   }
 
   // ============================================
-  // FUNZIONE: Carica il profilo dell'utente dal database
+  // FUNZIONE: Carica profilo
   // ============================================
   const fetchProfile = async (userId) => {
     try {
@@ -85,7 +100,7 @@ function App() {
   }
 
   // ============================================
-  // FUNZIONE: Gestisce il login
+  // FUNZIONE: Gestisce login
   // ============================================
   const handleLogin = async (user) => {
     setUser(user)
@@ -93,7 +108,7 @@ function App() {
   }
 
   // ============================================
-  // FUNZIONE: Gestisce il logout
+  // FUNZIONE: Gestisce logout
   // ============================================
   const handleLogout = () => {
     setUser(null)
@@ -101,7 +116,18 @@ function App() {
   }
 
   // ============================================
-  // SCHERMATA DI CARICAMENTO
+  // FUNZIONE: Reset completato con successo
+  // ============================================
+  const handleResetSuccess = () => {
+    setIsResettingPassword(false)
+    // Pulisci l'URL
+    window.history.replaceState({}, document.title, '/')
+    // Ricarica la pagina per tornare al login
+    window.location.reload()
+  }
+
+  // ============================================
+  // LOADING
   // ============================================
   if (loading) {
     return (
@@ -118,20 +144,27 @@ function App() {
   }
 
   // ============================================
-  // LOGICA DI RENDERING - Quale pagina mostrare?
+  // PAGINA RESET PASSWORD
+  // ============================================
+  if (isResettingPassword) {
+    return <ResetPassword onSuccess={handleResetSuccess} />
+  }
+
+  // ============================================
+  // LOGICA DI RENDERING
   // ============================================
   
-  // Se non c'è un utente loggato → mostra il LOGIN
+  // Nessun utente → LOGIN
   if (!user) {
     return <Login onLogin={handleLogin} />
   }
 
-  // Se l'utente è un ADMIN → mostra il PANNELLO ADMIN
+  // Utente ADMIN → ADMIN PANEL
   if (profile?.is_admin) {
     return <AdminPanel user={user} onLogout={handleLogout} />
   }
 
-  // Altrimenti → mostra la DASHBOARD UTENTE
+  // Utente normale → DASHBOARD
   return <Dashboard user={user} onLogout={handleLogout} />
 }
 
