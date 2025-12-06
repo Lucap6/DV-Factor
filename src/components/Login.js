@@ -1,7 +1,7 @@
 // ============================================
-// LOGIN COMPONENT - Homepage ridisegnata
+// LOGIN COMPONENT - Homepage con fix errori
 // ============================================
-// Design moderno con sezione informativa e chiringuito
+// Fix: Mostra errori dettagliati durante registrazione
 
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
@@ -16,7 +16,6 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
-  // Se l'utente vuole recuperare la password
   if (showForgotPassword) {
     return <ForgotPassword onBack={() => setShowForgotPassword(false)} />
   }
@@ -28,6 +27,9 @@ function Login({ onLogin }) {
 
     try {
       if (isSignUp) {
+        // REGISTRAZIONE
+        console.log('🔵 Inizio registrazione per:', email)
+        
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -35,25 +37,77 @@ function Login({ onLogin }) {
             data: {
               full_name: fullName,
             },
+            emailRedirectTo: window.location.origin,
           },
         })
 
-        if (error) throw error
-        setMessage('✅ Registrazione completata! Controlla la tua email per confermare.')
+        console.log('🔵 Risposta Supabase:', { data, error })
+
+        if (error) {
+          console.error('❌ Errore Supabase:', error)
+          throw error
+        }
+
+        // Verifica se l'utente è stato creato
+        if (data?.user) {
+          console.log('✅ Utente creato:', data.user.id)
+          
+          // Controlla se email confirmation è richiesta
+          if (data.user.identities && data.user.identities.length === 0) {
+            // Email già in uso
+            setMessage('⚠️ Questa email è già registrata. Prova a fare login.')
+          } else if (data.user.confirmed_at) {
+            // Email già confermata (auto-confirm attivo)
+            setMessage('✅ Registrazione completata! Puoi effettuare il login.')
+          } else {
+            // Email confirmation richiesta
+            setMessage('✅ Registrazione completata! Controlla la tua email (anche spam) per confermare l\'account.')
+          }
+        } else {
+          console.warn('⚠️ Nessun utente restituito da Supabase')
+          setMessage('⚠️ Registrazione in corso. Controlla la tua email.')
+        }
+
       } else {
+        // LOGIN
+        console.log('🔵 Tentativo login per:', email)
+        
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
 
-        if (error) throw error
+        console.log('🔵 Risposta login:', { data, error })
+
+        if (error) {
+          console.error('❌ Errore login:', error)
+          throw error
+        }
         
         if (data.user) {
+          console.log('✅ Login effettuato:', data.user.email)
           onLogin(data.user)
         }
       }
     } catch (error) {
-      setMessage('❌ ' + error.message)
+      console.error('❌ Errore completo:', error)
+      
+      // Mostra messaggi di errore più chiari
+      let errorMessage = '❌ '
+      
+      if (error.message.includes('User already registered')) {
+        errorMessage += 'Questa email è già registrata. Prova a fare login.'
+      } else if (error.message.includes('Invalid login credentials')) {
+        errorMessage += 'Email o password non corretti.'
+      } else if (error.message.includes('Email not confirmed')) {
+        errorMessage += 'Devi confermare la tua email prima di accedere. Controlla la tua casella email.'
+      } else if (error.message.includes('rate limit')) {
+        errorMessage += 'Troppi tentativi. Riprova tra qualche minuto.'
+      } else {
+        errorMessage += error.message
+      }
+      
+      setMessage(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -66,9 +120,7 @@ function Login({ onLogin }) {
       flexDirection: 'column',
       backgroundColor: '#f5f5f5'
     }}>
-      {/* ============================================ */}
       {/* SEZIONE LOGIN */}
-      {/* ============================================ */}
       <div style={{ 
         flex: '0 0 auto',
         backgroundColor: 'white',
@@ -76,13 +128,12 @@ function Login({ onLogin }) {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <div style={{ maxWidth: '400px', margin: '0 auto', textAlign: 'center' }}>
-          {/* Logo e Titolo */}
           <h1 style={{ 
             fontSize: '42px', 
             marginBottom: '10px',
             color: '#007bff'
           }}>
-            🏄🏻 DV-Factor
+            🏖️ DV-Factor
           </h1>
           <h2 style={{ 
             fontSize: '24px', 
@@ -125,7 +176,7 @@ function Login({ onLogin }) {
               />
             </div>
 
-            {/* Campo NOME COMPLETO (solo in registrazione) */}
+            {/* Campo NOME COMPLETO */}
             {isSignUp && (
               <div style={{ marginBottom: '15px', textAlign: 'center' }}>
                 <label style={{ 
@@ -175,6 +226,7 @@ function Login({ onLogin }) {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                minLength="6"
                 style={{ 
                   width: '100%', 
                   padding: '12px',
@@ -187,9 +239,14 @@ function Login({ onLogin }) {
                 onFocus={(e) => e.target.style.borderColor = '#007bff'}
                 onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
               />
+              {isSignUp && (
+                <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                  Minimo 6 caratteri
+                </p>
+              )}
             </div>
 
-            {/* Link password dimenticata (solo in login) */}
+            {/* Link password dimenticata */}
             {!isSignUp && (
               <div style={{ marginBottom: '20px', textAlign: 'center' }}>
                 <button
@@ -239,10 +296,11 @@ function Login({ onLogin }) {
               marginTop: '15px',
               padding: '12px',
               borderRadius: '8px',
-              backgroundColor: message.includes('❌') ? '#ffebee' : '#e8f5e9',
-              color: message.includes('❌') ? '#c62828' : '#2e7d32',
+              backgroundColor: message.includes('❌') ? '#ffebee' : message.includes('⚠️') ? '#fff3cd' : '#e8f5e9',
+              color: message.includes('❌') ? '#c62828' : message.includes('⚠️') ? '#856404' : '#2e7d32',
               fontSize: '14px',
-              textAlign: 'center'
+              textAlign: 'center',
+              lineHeight: '1.5'
             }}>
               {message}
             </div>
@@ -278,9 +336,7 @@ function Login({ onLogin }) {
         </div>
       </div>
 
-      {/* ============================================ */}
       {/* SEZIONE INFORMATIVA CON CHIRINGUITO */}
-      {/* ============================================ */}
       <div style={{ 
         flex: '1',
         backgroundImage: 'url(/images/chiringuito-bg.jpg)',
@@ -293,7 +349,6 @@ function Login({ onLogin }) {
         alignItems: 'center',
         justifyContent: 'center'
       }}>
-        {/* Overlay scuro per migliorare leggibilità */}
         <div style={{
           position: 'absolute',
           top: 0,
@@ -304,7 +359,6 @@ function Login({ onLogin }) {
           zIndex: 1
         }} />
 
-        {/* Contenuto informativo */}
         <div style={{ 
           position: 'relative',
           zIndex: 2,
@@ -320,7 +374,7 @@ function Login({ onLogin }) {
             fontWeight: 'bold',
             textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
           }}>
-            🏄🏻 Questo è il fantasy-game sulle dimissioni volontarie che nessun HR ha mai osato creare!
+            🏖️ Il Fantasy Game che nessuno ha mai osato creare!
           </h2>
           
           <p style={{ 
@@ -329,7 +383,7 @@ function Login({ onLogin }) {
             marginBottom: '30px',
             textShadow: '1px 1px 3px rgba(0,0,0,0.5)'
           }}>
-            Scegli 3 dipendenti che secondo te daranno le dimissioni entro fine anno. 
+            Scegli 3 dipendenti che secondo te daranno le dimissioni entro fine 2026. 
             Attiva il <strong>Bonus "Chiringuito a Fuerteventura"</strong> e vinci il jackpot 
             se indovini chi mollerà tutto per aprire un baretto sulla spiaggia! 🍹
           </p>
@@ -366,12 +420,12 @@ function Login({ onLogin }) {
               </div>
 
               <div>
-                <div style={{ fontSize: '40px', marginBottom: '10px' }}>📆</div>
+                <div style={{ fontSize: '40px', marginBottom: '10px' }}>🏖️</div>
                 <h4 style={{ fontSize: '18px', marginBottom: '8px', color: '#007bff' }}>
-                  Attenzione
+                  Attiva il Bonus
                 </h4>
                 <p style={{ fontSize: '14px', color: '#666' }}>
-                  Più tempo passa, più si erode il montepremi!
+                  Punta forte su uno: 60% del montepremi!
                 </p>
               </div>
 
@@ -381,7 +435,7 @@ function Login({ onLogin }) {
                   Vinci il jackpot
                 </h4>
                 <p style={{ fontSize: '14px', color: '#666' }}>
-                  Prima dimissione = 70% del payout + l'eventuale jackpot
+                  Prima dimissione = 70% del payout
                 </p>
               </div>
             </div>
@@ -414,9 +468,7 @@ function Login({ onLogin }) {
         </div>
       </div>
 
-      {/* ============================================ */}
       {/* FOOTER */}
-      {/* ============================================ */}
       <div style={{
         backgroundColor: '#333',
         color: 'white',
@@ -425,10 +477,10 @@ function Login({ onLogin }) {
         fontSize: '14px'
       }}>
         <p style={{ margin: 0 }}>
-          🏄🏻 DV-Factor: il fantasy-game sulle dimissioni volontarie che nessun HR ha mai osato creare!
+          🎮 DV-Factor - Il fantasy game sulle dimissioni volontarie
         </p>
         <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>
-          Da un'idea malata di @lucap6 • Gioco privato tra amici, a scopo ricreativo • Art. 1933 C.C.
+          Gioco privato tra amici, a scopo ricreativo • Art. 1933 C.C.
         </p>
       </div>
     </div>
