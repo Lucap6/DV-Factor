@@ -1,10 +1,10 @@
 // ============================================
-// DASHBOARD - Pannello utente (AGGIORNATO)
+// DASHBOARD - Completa e corretta
 // ============================================
-// Modifiche:
-// - Usa edition_participants invece di payment_status su profiles
-// - Mostra montepremi calcolato dinamicamente
-// - Crea automaticamente la partecipazione all'edizione
+// Fix:
+// 1. Aggiunto pulsante "Gestisci Profilo"
+// 2. Visualizzazione completa della giocata
+// 3. Logout funzionante
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
@@ -15,11 +15,11 @@ function Dashboard({ user, onLogout }) {
   // ============================================
   // STATI
   // ============================================
-  const [showProfile, setShowProfile] = useState(false) // NUOVO: mostra pagina profilo
+  const [showProfile, setShowProfile] = useState(false)
   const [profile, setProfile] = useState(null)
   const [employees, setEmployees] = useState([])
   const [gameEdition, setGameEdition] = useState(null)
-  const [participation, setParticipation] = useState(null) // NUOVO: traccia la partecipazione
+  const [participation, setParticipation] = useState(null)
   const [bet, setBet] = useState(null)
   const [loading, setLoading] = useState(true)
   
@@ -70,7 +70,7 @@ function Dashboard({ user, onLogout }) {
       
       setGameEdition(editionData)
 
-      // 3. NUOVO: Carica o crea la partecipazione
+      // 3. Carica o crea la partecipazione
       let { data: participationData, error: participationError } = await supabase
         .from('edition_participants')
         .select('*')
@@ -78,7 +78,6 @@ function Dashboard({ user, onLogout }) {
         .eq('game_edition_id', editionData.id)
         .maybeSingle()
 
-      // Se non esiste una partecipazione, creala automaticamente
       if (!participationData) {
         const { data: newParticipation, error: insertError } = await supabase
           .from('edition_participants')
@@ -100,7 +99,7 @@ function Dashboard({ user, onLogout }) {
 
       setParticipation(participationData)
 
-      // 4. Carica la puntata (se esiste)
+      // 4. Carica la puntata CON I NOMI DEI DIPENDENTI
       const { data: betData, error: betError } = await supabase
         .from('bets')
         .select(`
@@ -117,7 +116,6 @@ function Dashboard({ user, onLogout }) {
       if (betData) {
         setBet(betData)
         
-        // Aggiorna has_bet se necessario
         if (participationData && !participationData.has_bet) {
           await supabase
             .from('edition_participants')
@@ -151,7 +149,6 @@ function Dashboard({ user, onLogout }) {
     e.preventDefault()
     setMessage('')
 
-    // CONTROLLO: utente ha pagato?
     if (!participation?.payment_status) {
       setMessage('❌ Devi prima effettuare il pagamento per giocare!')
       return
@@ -167,14 +164,14 @@ function Dashboard({ user, onLogout }) {
       return
     }
 
-    const employees = [selectedEmployees.employee1, selectedEmployees.employee2, selectedEmployees.employee3]
-    const uniqueEmployees = new Set(employees)
+    const employeesList = [selectedEmployees.employee1, selectedEmployees.employee2, selectedEmployees.employee3]
+    const uniqueEmployees = new Set(employeesList)
     if (uniqueEmployees.size !== 3) {
       setMessage('❌ Non puoi scegliere lo stesso dipendente più volte!')
       return
     }
 
-    if (selectedEmployees.chiringuito && !employees.includes(selectedEmployees.chiringuito)) {
+    if (selectedEmployees.chiringuito && !employeesList.includes(selectedEmployees.chiringuito)) {
       setMessage('❌ Il bonus Chiringuito deve essere attivato su uno dei 3 dipendenti selezionati!')
       return
     }
@@ -208,34 +205,128 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
+  // ============================================
+  // FUNZIONE: Logout (CORRETTA)
+  // ============================================
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    onLogout()
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      
+      // Chiama la funzione onLogout passata da App.js
+      onLogout()
+      
+      // Pulisci lo stato locale
+      setProfile(null)
+      setGameEdition(null)
+      setParticipation(null)
+      setBet(null)
+      
+    } catch (error) {
+      console.error('Errore durante il logout:', error)
+      alert('Errore durante il logout. Riprova.')
+    }
   }
 
   if (loading) return <p>Caricamento...</p>
 
+  // ============================================
+  // Se l'utente vuole gestire il profilo
+  // ============================================
+  if (showProfile) {
+    return <UserProfile user={user} onBack={() => {
+      setShowProfile(false)
+      fetchData() // Ricarica i dati dopo aver modificato il profilo
+    }} />
+  }
+
   return (
     <div style={{ maxWidth: '1200px', margin: '20px auto', padding: '20px' }}>
+      {/* ============================================ */}
       {/* HEADER */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <div>
-          <h1>🎮 DV-Factor Dashboard</h1>
-          <p>Benvenuto, <strong>{profile?.full_name || user.email}</strong></p>
-          {participation && (
-            <p style={{ fontSize: '14px', color: participation.payment_status ? 'green' : 'red' }}>
-              {participation.payment_status 
-                ? `✅ Pagamento effettuato (€${parseFloat(participation.payment_amount).toFixed(2)})` 
-                : '❌ Pagamento NON effettuato'}
-            </p>
+      {/* ============================================ */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '30px',
+        flexWrap: 'wrap',
+        gap: '15px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          {/* Avatar */}
+          {profile?.avatar_url && (
+            <img 
+              src={profile.avatar_url} 
+              alt="Avatar"
+              style={{ 
+                width: '60px', 
+                height: '60px', 
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '3px solid #007bff',
+                cursor: 'pointer'
+              }}
+              onClick={() => setShowProfile(true)}
+              title="Clicca per modificare"
+            />
           )}
+          <div>
+            <h1 style={{ marginBottom: '5px' }}>🎮 DV-Factor Dashboard</h1>
+            <p style={{ margin: '5px 0' }}>
+              Benvenuto, <strong>{profile?.nickname || profile?.full_name || user.email}</strong>
+            </p>
+            {participation && (
+              <p style={{ 
+                fontSize: '14px', 
+                color: participation.payment_status ? 'green' : 'red',
+                margin: '5px 0'
+              }}>
+                {participation.payment_status 
+                  ? `✅ Pagamento effettuato (€${parseFloat(participation.payment_amount).toFixed(2)})` 
+                  : '❌ Pagamento NON effettuato'}
+              </p>
+            )}
+          </div>
         </div>
-        <button onClick={handleLogout} style={{ padding: '10px 20px', cursor: 'pointer' }}>
-          Logout
-        </button>
+
+        {/* Pulsanti azione */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button 
+            onClick={() => setShowProfile(true)}
+            style={{ 
+              padding: '10px 20px',
+              cursor: 'pointer',
+              backgroundColor: '#17a2b8',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              fontSize: '14px',
+              fontWeight: '600'
+            }}
+          >
+            ⚙️ Gestisci Profilo
+          </button>
+          <button 
+            onClick={handleLogout}
+            style={{ 
+              padding: '10px 20px',
+              cursor: 'pointer',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              fontSize: '14px'
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
+      {/* ============================================ */}
       {/* INFORMAZIONI EDIZIONE */}
+      {/* ============================================ */}
       {gameEdition ? (
         <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
           <h3>📅 Edizione {gameEdition.year}</h3>
@@ -254,31 +345,63 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
-      {/* VISUALIZZA PUNTATA */}
+      {/* ============================================ */}
+      {/* VISUALIZZA PUNTATA (SEMPRE VISIBILE) */}
+      {/* ============================================ */}
       {bet && (
-        <div style={{ backgroundColor: '#e6f7ff', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-          <h3>📝 La tua puntata</h3>
-          {bet.is_revealed ? (
-            <div>
-              <p><strong>Dipendente 1:</strong> {bet.employee_1?.first_name} {bet.employee_1?.last_name}</p>
-              <p><strong>Dipendente 2:</strong> {bet.employee_2?.first_name} {bet.employee_2?.last_name}</p>
-              <p><strong>Dipendente 3:</strong> {bet.employee_3?.first_name} {bet.employee_3?.last_name}</p>
-              {bet.chiringuito && (
-                <p style={{ color: 'orange', fontWeight: 'bold' }}>
-                  🏖️ Bonus Chiringuito attivato su: {bet.chiringuito?.first_name} {bet.chiringuito?.last_name}
-                </p>
-              )}
+        <div style={{ 
+          backgroundColor: '#e6f7ff', 
+          padding: '20px', 
+          borderRadius: '8px', 
+          marginBottom: '20px',
+          border: '2px solid #007bff'
+        }}>
+          <h3 style={{ marginBottom: '15px' }}>📝 La tua puntata</h3>
+          
+          {/* SEMPRE visibile, anche se is_revealed è false */}
+          <div>
+            <div style={{ marginBottom: '10px' }}>
+              <strong>Dipendente 1:</strong> {bet.employee_1 ? `${bet.employee_1.first_name} ${bet.employee_1.last_name}` : 'N/A'}
             </div>
-          ) : (
-            <p>🔒 Puntata inserita e registrata. I dettagli verranno rivelati a fine gioco.</p>
-          )}
-          <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
-            Inserita il: {new Date(bet.created_at).toLocaleString('it-IT')}
+            <div style={{ marginBottom: '10px' }}>
+              <strong>Dipendente 2:</strong> {bet.employee_2 ? `${bet.employee_2.first_name} ${bet.employee_2.last_name}` : 'N/A'}
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <strong>Dipendente 3:</strong> {bet.employee_3 ? `${bet.employee_3.first_name} ${bet.employee_3.last_name}` : 'N/A'}
+            </div>
+            {bet.chiringuito && (
+              <div style={{ 
+                marginTop: '15px',
+                padding: '15px',
+                backgroundColor: '#fff3cd',
+                borderRadius: '5px',
+                border: '2px solid #ffc107'
+              }}>
+                <p style={{ color: '#856404', fontWeight: 'bold', margin: 0 }}>
+                  🏖️ Bonus "Chiringuito a Fuerteventura" attivato su:<br/>
+                  <span style={{ fontSize: '18px' }}>
+                    {bet.chiringuito.first_name} {bet.chiringuito.last_name}
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          <p style={{ fontSize: '12px', color: '#666', marginTop: '15px', borderTop: '1px solid #ccc', paddingTop: '10px' }}>
+            Puntata inserita il: {new Date(bet.created_at).toLocaleString('it-IT')}
           </p>
+
+          {!bet.is_revealed && (
+            <p style={{ fontSize: '13px', color: '#007bff', marginTop: '10px', fontStyle: 'italic' }}>
+              ℹ️ Le puntate degli altri partecipanti verranno rivelate solo a fine gioco.
+            </p>
+          )}
         </div>
       )}
 
+      {/* ============================================ */}
       {/* FORM INSERIMENTO PUNTATA */}
+      {/* ============================================ */}
       {!bet && gameEdition && participation?.payment_status && (
         <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #ddd' }}>
           <h3>🎯 Inserisci la tua puntata</h3>
