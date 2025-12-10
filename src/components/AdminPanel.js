@@ -707,6 +707,19 @@ function AdminPanel({ user, onLogout }) {
                   />
                 </div>
                 <div>
+                  <label>Link PayPal.Me:</label>
+                  <input
+                    type="text"
+                    value={newEdition.paypal_link || ''}
+                    onChange={(e) => setNewEdition({...newEdition, paypal_link: e.target.value})}
+                    placeholder="https://paypal.me/tuonome"
+                    style={{ width: '100%', padding: '8px' }}
+                  />
+                  <p style={{ fontSize: '11px', color: '#666', marginTop: '3px' }}>
+                    Opzionale: per pagamenti "Tra amici e familiari"
+                  </p>
+                </div>
+                <div>
                   <label>Data inizio:</label>
                   <input
                     type="date"

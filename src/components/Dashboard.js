@@ -537,12 +537,90 @@ function Dashboard({ user, onLogout }) {
 
       {/* MESSAGGIO SE NON HA PAGATO */}
       {!participation?.payment_status && gameEdition && (
-        <div style={{ backgroundColor: '#ffe6e6', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
-          <h3>⚠️ Pagamento richiesto</h3>
-          <p>Per inserire la tua puntata devi prima effettuare il pagamento di €{parseFloat(gameEdition.entry_fee).toFixed(2)}.</p>
-          <p style={{ fontSize: '14px', color: '#666' }}>
-            Contatta l'amministratore per confermare il pagamento.
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          padding: '30px', 
+          borderRadius: '8px', 
+          marginTop: '20px',
+          border: '2px solid #ffc107',
+          textAlign: 'center'
+        }}>
+          <h3 style={{ color: '#856404', marginBottom: '20px' }}>
+            ⚠️ Pagamento richiesto
+          </h3>
+          <p style={{ fontSize: '18px', marginBottom: '25px', color: '#333' }}>
+            Per inserire la tua puntata devi prima effettuare il pagamento di{' '}
+            <strong style={{ fontSize: '24px', color: '#28a745' }}>
+              €{parseFloat(gameEdition.entry_fee).toFixed(2)}
+            </strong>
           </p>
+
+          {/* Pulsante PayPal */}
+          {gameEdition.paypal_link ? (
+            <div style={{ marginBottom: '20px' }}>
+              <a
+                href={`${gameEdition.paypal_link}/${parseFloat(gameEdition.entry_fee).toFixed(2)}EUR`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  padding: '15px 40px',
+                  backgroundColor: '#0070ba',
+                  color: 'white',
+                  textDecoration: 'none',
+                  borderRadius: '30px',
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = '#005a8e'
+                  e.target.style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = '#0070ba'
+                  e.target.style.transform = 'translateY(0)'
+                }}
+              >
+                💳 Paga con PayPal
+              </a>
+              <p style={{ 
+                fontSize: '13px', 
+                color: '#666', 
+                marginTop: '15px',
+                fontStyle: 'italic'
+              }}>
+                Il pagamento viene elaborato come "Tra amici e familiari"
+              </p>
+            </div>
+          ) : (
+            <p style={{ fontSize: '14px', color: '#856404', marginBottom: '20px' }}>
+              Contatta l'amministratore per le modalità di pagamento.
+            </p>
+          )}
+
+          {/* Informazioni aggiuntive */}
+          <div style={{ 
+            marginTop: '25px', 
+            padding: '15px', 
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            fontSize: '14px',
+            color: '#666',
+            textAlign: 'left'
+          }}>
+            <p style={{ marginBottom: '10px' }}>
+              <strong>📌 Come funziona:</strong>
+            </p>
+            <ol style={{ marginLeft: '20px', lineHeight: '1.8' }}>
+              <li>Clicca sul pulsante "Paga con PayPal"</li>
+              <li>Verrai reindirizzato a PayPal</li>
+              <li>Completa il pagamento di €{parseFloat(gameEdition.entry_fee).toFixed(2)}</li>
+              <li>L'amministratore confermerà il pagamento</li>
+              <li>Potrai inserire la tua puntata!</li>
+            </ol>
+          </div>
         </div>
       )}
 

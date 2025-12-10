@@ -133,10 +133,10 @@ function Login({ onLogin }) {
             marginBottom: '10px',
             color: '#007bff'
           }}>
-            🏖️ DV-Factor
+            🏄🏻 DV-Factor
           </h1>
           <h2 style={{ 
-            fontSize: '24px', 
+            fontSize: '32px', 
             marginBottom: '30px',
             color: '#333',
             fontWeight: 'normal'
@@ -374,7 +374,7 @@ function Login({ onLogin }) {
             fontWeight: 'bold',
             textShadow: '2px 2px 4px rgba(0,0,0,0.5)'
           }}>
-            🏖️ Il Fantasy Game che nessuno ha mai osato creare!
+            🏄🏻 Il Fantasy Game che nessuno ha mai osato creare!
           </h2>
           
           <p style={{ 
@@ -425,7 +425,7 @@ function Login({ onLogin }) {
                   Attiva il Bonus
                 </h4>
                 <p style={{ fontSize: '14px', color: '#666' }}>
-                  Punta forte su uno: 60% del montepremi!
+                  Punta forte su uno e se apre un chiringuito elimini tutti gli altri concorrenti!
                 </p>
               </div>
 
@@ -435,7 +435,7 @@ function Login({ onLogin }) {
                   Vinci il jackpot
                 </h4>
                 <p style={{ fontSize: '14px', color: '#666' }}>
-                  Prima dimissione = 70% del payout
+                  Prima dimissione = 70% del payout + Jackpot
                 </p>
               </div>
             </div>
@@ -463,7 +463,7 @@ function Login({ onLogin }) {
             fontSize: '16px',
             textShadow: '1px 1px 3px rgba(0,0,0,0.5)'
           }}>
-            Registrati ora e inizia a giocare! Quota di partecipazione: <strong>€3,00</strong>
+            Registrati ora e inizia a giocare! Quota di partecipazione: <strong>€ 3,00</strong>
           </p>
         </div>
       </div>
@@ -477,10 +477,10 @@ function Login({ onLogin }) {
         fontSize: '14px'
       }}>
         <p style={{ margin: 0 }}>
-          🎮 DV-Factor - Il fantasy game sulle dimissioni volontarie
+          🏄🏻 DV-Factor - Il fantasy game sulle dimissioni volontarie
         </p>
         <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#999' }}>
-          Gioco privato tra amici, a scopo ricreativo • Art. 1933 C.C.
+          Da un'idea malata di @Lucap6 • Gioco privato tra amici, a scopo ricreativo • Art. 1933 C.C.
         </p>
       </div>
     </div>
