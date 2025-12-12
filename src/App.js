@@ -1,23 +1,8 @@
 // ============================================
-// APP.JS - File principale (AGGIORNATO)
-// ============================================
-// Gestisce autenticazione e routing
-// Include gestione reset password
-
-// ============================================
-// APP.JS - VERSIONE CON FIX CARICAMENTO INFINITO
-// ============================================
-// Aggiunte:
-// - Timeout automatico dopo 5 secondi
-// - Pulsante di emergenza per sbloccare
-// - Gestione errori migliorata
-// - Pulizia cache
-
-// ============================================
 // APP.JS - Con creazione profilo lato client
 // ============================================
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from './supabaseClient'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard'
@@ -31,14 +16,24 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [isResettingPassword, setIsResettingPassword] = useState(false)
   const [loadingError, setLoadingError] = useState(null)
+  const loadingTimeoutRef = useRef(null) // NUOVO
 
   useEffect(() => {
+    // NUOVO: Timeout aggressivo - 3 secondi
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.error('⏱️ TIMEOUT: Sblocco automatico dopo 3 secondi')
+        setLoading(false)
+        setLoadingError('timeout')
+      }
+    }, 3000) // 3 secondi invece di 5
     const params = new URLSearchParams(window.location.search)
     const isReset = window.location.pathname === '/reset-password' || params.get('type') === 'recovery'
     
     if (isReset) {
       setIsResettingPassword(true)
       setLoading(false)
+      clearTimeout(loadingTimeoutRef.current)
       return
     }
 
@@ -51,6 +46,7 @@ function App() {
         if (event === 'PASSWORD_RECOVERY') {
           setIsResettingPassword(true)
           setLoading(false)
+          clearTimeout(loadingTimeoutRef.current)
           return
         }
 
@@ -62,11 +58,15 @@ function App() {
           setProfile(null)
         }
         setLoading(false)
+        clearTimeout(loadingTimeoutRef.current)
       }
     )
 
     return () => {
       authListener.subscription.unsubscribe()
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current)
+      }
     }
   }, [])
 
@@ -90,6 +90,7 @@ function App() {
       setLoadingError('check_session_failed')
     } finally {
       setLoading(false)
+      clearTimeout(loadingTimeoutRef.current)
     }
   }
 
@@ -203,8 +204,34 @@ function App() {
           marginBottom: '20px'
         }} />
         
-        <p style={{ fontSize: '20px', color: '#333' }}>
+        <p style={{ fontSize: '20px', color: '#333', marginBottom: '30px' }}>
           ⏳ Caricamento...
+        </p>
+
+        {/* NUOVO: Pulsante di emergenza visibile subito */}
+        <button
+          onClick={() => {
+            console.log('🔓 Sblocco manuale')
+            setLoading(false)
+            setLoadingError(null)
+          }}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            opacity: 0.7
+          }}
+          onMouseEnter={(e) => e.target.style.opacity = '1'}
+          onMouseLeave={(e) => e.target.style.opacity = '0.7'}
+        >
+          🚨 Sblocca (se bloccato)
+        </button>
+        <p style={{ fontSize: '12px', color: '#999', marginTop: '10px' }}>
+          Clicca solo se il caricamento si blocca
         </p>
 
         <style dangerouslySetInnerHTML={{
