@@ -43,6 +43,22 @@ function App() {
       async (event, session) => {
         console.log('🔐 Auth event:', event)
         
+        // NUOVO: Se il token è scaduto, forza logout e pulisci tutto
+        if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+          if (!session) {
+            console.log('🔄 Token scaduto o logout, pulizia completa...')
+            setUser(null)
+            setProfile(null)
+            setLoading(false)
+            clearTimeout(loadingTimeoutRef.current)
+            
+            // Pulisci completamente lo storage
+            localStorage.clear()
+            sessionStorage.clear()
+            return
+          }
+        }
+        
         if (event === 'PASSWORD_RECOVERY') {
           setIsResettingPassword(true)
           setLoading(false)
@@ -76,7 +92,25 @@ function App() {
       
       const { data: { session }, error } = await supabase.auth.getSession()
       
-      if (error) throw error
+      // NUOVO: Se c'è un errore di autenticazione, pulisci tutto
+      if (error) {
+        console.error('❌ Errore autenticazione:', error)
+        
+        if (error.message.includes('refresh_token') || error.message.includes('Invalid')) {
+          console.log('🔄 Token invalido, pulizia e reindirizzamento al login...')
+          await supabase.auth.signOut()
+          localStorage.clear()
+          sessionStorage.clear()
+          setUser(null)
+          setProfile(null)
+          setLoadingError(null)
+          setLoading(false)
+          clearTimeout(loadingTimeoutRef.current)
+          return
+        }
+        
+        throw error
+      }
       
       if (session?.user) {
         console.log('✅ Sessione trovata:', session.user.email)
@@ -87,7 +121,14 @@ function App() {
       }
     } catch (error) {
       console.error('❌ Errore nel checkSession:', error)
-      setLoadingError('check_session_failed')
+      
+      // Invece di mostrare errore, forza logout pulito
+      await supabase.auth.signOut()
+      localStorage.clear()
+      sessionStorage.clear()
+      setUser(null)
+      setProfile(null)
+      setLoadingError(null)
     } finally {
       setLoading(false)
       clearTimeout(loadingTimeoutRef.current)
